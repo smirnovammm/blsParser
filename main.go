@@ -1,52 +1,41 @@
 package main
 
 import (
+	"blsParser/service"
 	"blsParser/src"
 	"encoding/json"
 	"fmt"
-	"github.com/playwright-community/playwright-go"
 	"io/ioutil"
+	"time"
 )
 
 const configFile = "./config.json"
 
 func main() {
-	var mailDate src.Email
+	var config src.Config
 	file, err := ioutil.ReadFile(configFile)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to read config %v", err))
 	}
-	if err := json.Unmarshal(file, &mailDate); err != nil {
+	if err := json.Unmarshal(file, &config); err != nil {
 		panic(fmt.Sprintf("Failed to parse config %v", err))
 	}
 
-	pw, err := playwright.Run()
-	if err != nil {
-		panic(fmt.Sprintf("could not start playwright: %v", err))
-	}
-	defer pw.Stop()
+	tgClient := src.NewTgClient(config.TgToken)
+	imapClient, err := src.NewImapClient(config.Email)
+	defer imapClient.Logout()
 
-	headless := false
+	srv := service.NewService(imapClient, tgClient)
 
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: &headless,
-	})
-	defer browser.Close()
-	if err != nil {
-		panic(fmt.Sprintf("could not launch browser: %v", err))
-	}
-
-	page, err := browser.NewPage()
-	if err != nil {
-		panic(fmt.Sprintf("could not create page: %v", err))
-	}
-
-	if err = src.GetSlots(page, src.AppointmentParameters{
-		City:     "Москва",
-		Category: "Обычная подача",
-		Phone:    "9108934422",
-		Email:    mailDate,
-	}); err != nil {
-		panic(fmt.Sprintf("Unable to get avalible slots %v", err))
+	for i := 1; i < 30; i++ {
+		if err := srv.ParseSlots(src.AppointmentParameters{
+			City:     "Москва",
+			Category: "Обычная подача",
+			Phone:    "9108934422",
+			Email:    config.Email,
+		}); err != nil {
+			panic(fmt.Sprintf("Failed to parse slots %v", err))
+		}
+		time.Sleep(5 * time.Minute)
 	}
 }

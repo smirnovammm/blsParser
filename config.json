@@ -1,4 +1,6 @@
 {
-  "address": "",
-  "password": ""
+  "email": {
+    "address": "",
+    "password": ""},
+  "tg_token": ""
 }

@@ -2,11 +2,11 @@ package src
 
 import (
 	"github.com/playwright-community/playwright-go"
-	"log"
 	"time"
 )
 
 const (
+	blsURL           = "https://blsrussiaportugal.com/russian/appointment.php"
 	CenterDropdown   = "//select[@name='centre']"
 	CategoryDropdown = "//select[@name='category']"
 	PhoneInput       = "//input[@name='phone']"
@@ -15,81 +15,87 @@ const (
 	OtpInput         = "//input[@name='otp']"
 	ContinueButton   = ".btn-ctnue"
 	AgreeButton      = ".primary-btn"
+	datesTable       = ".app_date.validate"
+	activeDays       = ".day.active.activeClass"
 )
 
-func GetSlots(page playwright.Page, params AppointmentParameters) error {
+type Browser struct {
+	page   playwright.Page
+	params AppointmentParameters
+}
+
+func NewBlsUi(page *playwright.Page, params *AppointmentParameters) *Browser {
+	return &Browser{
+		page:   *page,
+		params: *params,
+	}
+}
+
+func (b Browser) FillFirstPage() error {
 	var err error
-	if _, err = page.Goto("https://blsrussiaportugal.com/russian/appointment.php"); err != nil {
+	if _, err = b.page.Goto(blsURL); err != nil {
 		return err
 	}
 
-	cityOption := []string{params.City}
-	if _, err = page.Locator(CenterDropdown).SelectOption(playwright.SelectOptionValues{
+	cityOption := []string{b.params.City}
+	if _, err = b.page.Locator(CenterDropdown).SelectOption(playwright.SelectOptionValues{
 		ValuesOrLabels: &cityOption,
 	}); err != nil {
 		return err
 	}
 
-	ctgrOption := []string{params.Category}
-	if _, err = page.Locator(CategoryDropdown).SelectOption(playwright.SelectOptionValues{
+	ctgrOption := []string{b.params.Category}
+	if _, err = b.page.Locator(CategoryDropdown).SelectOption(playwright.SelectOptionValues{
 		ValuesOrLabels: &ctgrOption,
 	}); err != nil {
 		return err
 	}
 
 	time.Sleep(1 * time.Second)
-	if err = page.Locator(PhoneInput).Fill(params.Phone); err != nil {
+	if err = b.page.Locator(PhoneInput).Fill(b.params.Phone); err != nil {
 		return err
 	}
-	if err = page.Locator(EmailInput).Fill(params.Email.Address); err != nil {
+	if err = b.page.Locator(EmailInput).Fill(b.params.Email.Address); err != nil {
 		return err
 	}
-	//if err = page.GetByText(SendOtpText).Click(); err != nil {
-	//	return err
-	//}
-
-	time.Sleep(2 * time.Second)
-
-	mailClient, err := NewImapClient(params.Email)
-	if err != nil {
-		return err
-	}
-	defer mailClient.Logout()
-
-	code, _, err := mailClient.GetLastOtp()
-	if err != nil {
+	if err = b.page.GetByText(SendOtpText).Click(); err != nil {
 		return err
 	}
 
-	if err = page.Locator(OtpInput).Fill(*code); err != nil {
+	time.Sleep(4 * time.Second)
+	return nil
+}
+
+func (b Browser) FillOtp(otp string) error {
+	if err := b.page.Locator(OtpInput).Fill(otp); err != nil {
 		return err
 	}
 
-	if err = page.Locator(ContinueButton).Click(); err != nil {
+	if err := b.page.Locator(ContinueButton).Click(); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (b Browser) CheckSlots() ([]string, error) {
+
+	if err := b.page.Locator(AgreeButton).Click(); err != nil {
+		return nil, err
 	}
 
-	if err = page.Locator(AgreeButton).Click(); err != nil {
-		return err
+	if err := b.page.Locator(datesTable).Click(); err != nil {
+		return nil, err
 	}
-
-	if err = page.Locator(".app_date.validate").Click(); err != nil {
-		return err
-	}
-	//if err = page.Locator(".day.disabled.fullcap").WaitFor(playwright.LocatorWaitForOptions{
-	//	State: playwright.WaitForSelectorStateVisible,
-	//}); err != nil {
-	//	return err
-	//}
 
 	var dts []string
-	dates, _ := page.Locator(".day.disabled.fullcap").All()
-	for _, d := range dates {
+
+	dt, err := b.page.Locator(activeDays).All()
+	for _, d := range dt {
 		dat, _ := d.TextContent()
 		dts = append(dts, dat)
 	}
+	if err != nil {
+	}
 
-	log.Println(dts)
-
-	return nil
+	return dts, nil
 }

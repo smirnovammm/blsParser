@@ -5,6 +5,11 @@ type Email struct {
 	Password string `json:"password"`
 }
 
+type Config struct {
+	Email   Email  `json:"email"`
+	TgToken string `json:"tg_token"`
+}
+
 type AppointmentParameters struct {
 	City     string
 	Category string
