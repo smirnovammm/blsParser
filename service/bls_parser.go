@@ -2,66 +2,50 @@ package service
 
 import (
 	"blsParser/src"
+	"context"
 	"fmt"
-	"github.com/playwright-community/playwright-go"
 	"time"
 )
 
 type Service struct {
 	imapClient *src.ImapClient
 	tgClient   *src.TgClient
+	browser    *src.Browser
 }
 
-func NewService(imapClient *src.ImapClient, tgClient *src.TgClient) *Service {
+func NewService(imapClient *src.ImapClient, tgClient *src.TgClient, browser *src.Browser) *Service {
 	return &Service{
 		imapClient: imapClient,
 		tgClient:   tgClient,
+		browser:    browser,
 	}
 }
 
-func (s Service) ParseSlots(params src.AppointmentParameters) error {
-	pw, err := playwright.Run()
-	if err != nil {
-		panic(fmt.Sprintf("could not start playwright: %v", err))
-	}
-	defer pw.Stop()
+func (s Service) ParseSlots() error {
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	headless := false
-
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: &headless,
-	})
-	defer browser.Close()
-	if err != nil {
-		panic(fmt.Sprintf("could not launch browser: %v", err))
-	}
-
-	page, err := browser.NewPage()
-	if err != nil {
-		panic(fmt.Sprintf("could not create page: %v", err))
-	}
-
-	blsUi := src.NewBlsUi(&page, &params)
-
-	if err = blsUi.FillFirstPage(); err != nil {
+	otpSendTime := time.Now()
+	if err := s.browser.FillFirstPage(); err != nil {
 		return err
 	}
-
 	time.Sleep(5 * time.Second)
 
-	code, _, err := s.imapClient.GetLastOtp()
+	code, _, err := s.imapClient.GetLastOtp(&otpSendTime)
 	if err != nil {
 		return err
 	}
 
-	if err = blsUi.FillOtp(*code); err != nil {
+	if err = s.browser.FillOtp(*code); err != nil {
 		return err
 	}
 
-	dates, err := blsUi.CheckSlots()
+	dates, err := s.browser.CheckSlots()
 	if err != nil {
 		return err
 	}
+	time.Sleep(5 * time.Second)
+
 	if err = s.tgClient.SendToTg(fmt.Sprintf("Free slots: %s", dates)); err != nil {
 		return err
 	}

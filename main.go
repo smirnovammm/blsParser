@@ -3,38 +3,38 @@ package main
 import (
 	"blsParser/service"
 	"blsParser/src"
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
+	"blsParser/src/config"
+	"log"
 	"time"
 )
 
-const configFile = "./config.json"
-
 func main() {
-	var config src.Config
-	file, err := ioutil.ReadFile(configFile)
+	cfg, err := config.Load()
 	if err != nil {
-		panic(fmt.Sprintf("Failed to read config %v", err))
-	}
-	if err := json.Unmarshal(file, &config); err != nil {
-		panic(fmt.Sprintf("Failed to parse config %v", err))
 	}
 
-	tgClient := src.NewTgClient(config.TgToken)
-	imapClient, err := src.NewImapClient(config.Email)
+	tgClient := src.NewTgClient(cfg.TgToken)
+	imapClient, err := src.NewImapClient(cfg.Email.Address, cfg.Email.Password)
+	if err != nil {
+	}
 	defer imapClient.Logout()
 
-	srv := service.NewService(imapClient, tgClient)
+	blsUi, err := src.NewBlsUi(&src.AppointmentParameters{
+		City:     "Москва",
+		Category: "Обычная подача",
+		Phone:    "9108934422",
+		Email:    cfg.Email.Address,
+	})
+	if err != nil {
+	}
+
+	srv := service.NewService(imapClient, tgClient, blsUi)
 
 	for i := 1; i < 30; i++ {
-		if err := srv.ParseSlots(src.AppointmentParameters{
-			City:     "Москва",
-			Category: "Обычная подача",
-			Phone:    "9108934422",
-			Email:    config.Email,
-		}); err != nil {
-			panic(fmt.Sprintf("Failed to parse slots %v", err))
+		if err := srv.ParseSlots(); err != nil {
+			log.Printf("Failed to parse slots, retrying in 1 minute %s", err)
+			time.Sleep(1 + time.Minute)
+			continue
 		}
 		time.Sleep(5 * time.Minute)
 	}

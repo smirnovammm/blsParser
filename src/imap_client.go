@@ -1,6 +1,7 @@
 package src
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"strings"
@@ -15,7 +16,7 @@ type ImapClient struct {
 	client *client.Client
 }
 
-func NewImapClient(email Email) (*ImapClient, error) {
+func NewImapClient(email string, password string) (*ImapClient, error) {
 	log.Println("Connecting to mailbox")
 	c, err := client.DialTLS("imap.gmail.com:993", nil)
 	if err != nil {
@@ -23,14 +24,36 @@ func NewImapClient(email Email) (*ImapClient, error) {
 	}
 	log.Println("Connected")
 
-	log.Printf("Login to %s", email.Address)
-	if err := c.Login(email.Address, email.Password); err != nil {
+	log.Printf("Login to %s", email)
+	if err := c.Login(email, password); err != nil {
 		return nil, err
 	}
 	return &ImapClient{client: c}, nil
 }
 
-func (c ImapClient) GetLastOtp() (*string, *time.Time, error) {
+func (c ImapClient) GetLastOtp(afterTime *time.Time) (*string, *time.Time, error) {
+	var code *string
+	var date *time.Time
+	var err error
+
+	for i := 1; i < 4; i++ {
+		code, date, err = c.getLastOtp()
+		if err != nil {
+			continue
+		}
+		if date.After(*afterTime) {
+			return code, date, nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return nil, nil, fmt.Errorf("Failed to find otp after: %s Last received message at: %s ", afterTime, *date)
+}
+
+func (c ImapClient) getLastOtp() (*string, *time.Time, error) {
 	var code string
 	var date time.Time
 
